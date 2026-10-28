@@ -18,8 +18,7 @@ pub const DEFAULT_MESH_UDP_PORT: u16 = cua_mesh::MEDIA_UDP_PORT;
 
 /// Largest `bytes` payload accepted in one chunk message.
 pub const MAX_CHUNK_BYTES: u32 = 4 * 1024 * 1024;
-/// Largest encoded gRPC message accepted or sent.
-pub const MAX_MESSAGE_BYTES: u32 = 8 * 1024 * 1024;
+pub use cua_spacesd_provider_api::host::MAX_MESSAGE_BYTES;
 /// Recommended bulk transfer chunk size.
 pub const PREFERRED_CHUNK_BYTES: u32 = 1024 * 1024;
 /// Default per-process scrollback ring.

@@ -33,6 +33,10 @@ use sha2::Sha256;
 use tower::{Layer, Service};
 
 use crate::util::{constant_time_eq, random_id};
+pub use cua_spacesd_provider_api::host::{
+    caller, record_screenshot, CallerIdentity, PendingScreenshot, RelayCaller, ScreenshotRecorder,
+    TicketClaims, TicketError, TicketScope, ViewerGrant,
+};
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -41,130 +45,6 @@ pub const MAX_TICKET_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// WebSocket subprotocol prefix carrying a ticket: `cua.ticket.<ticket>`.
 pub const TICKET_SUBPROTOCOL_PREFIX: &str = "cua.ticket.";
-
-/// What a ticket may open.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TicketScope {
-    /// The media WebSocket / QUIC session (`/media`).
-    Media,
-    /// TCP forwarding (`/tunnel`).
-    Tunnel,
-    /// Reverse-SOCKS egress (`/hotspot`).
-    Hotspot,
-    /// The Cua Volume mount's client socket (`/volume`).
-    Volume,
-    /// File transfer side channels.
-    Files,
-    /// The web viewer's scoped bearer (`SystemService.CreateViewerTicket`).
-    Viewer,
-}
-
-impl TicketScope {
-    /// Stable wire name.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Media => "media",
-            Self::Tunnel => "tunnel",
-            Self::Hotspot => "hotspot",
-            Self::Volume => "volume",
-            Self::Files => "files",
-            Self::Viewer => "viewer",
-        }
-    }
-
-    fn parse(value: &str) -> Option<Self> {
-        Some(match value {
-            "media" => Self::Media,
-            "tunnel" => Self::Tunnel,
-            "hotspot" => Self::Hotspot,
-            "volume" => Self::Volume,
-            "files" => Self::Files,
-            "viewer" => Self::Viewer,
-            _ => return None,
-        })
-    }
-}
-
-/// Verified contents of a ticket.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TicketClaims {
-    /// Scope the ticket was minted for.
-    pub scope: TicketScope,
-    /// Resource id the ticket is bound to (forward id, hotspot id, media
-    /// session id, ...).
-    pub resource: String,
-    /// `Principal.id` of the minting caller (may be empty).
-    pub principal_id: String,
-    /// Expiry.
-    pub expires_at: SystemTime,
-}
-
-/// What a viewer ticket allows, carried in the ticket's resource field.
-#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
-pub struct ViewerGrant {
-    /// Highest `SessionPolicy` (as its proto number) media may open with.
-    #[serde(rename = "p")]
-    pub policy: i32,
-    /// `ComputerService.GetClipboard` / `SetClipboard`.
-    #[serde(rename = "c", default)]
-    pub clipboard: bool,
-    /// Absolute guest directory for `FilesystemService`, if any.
-    #[serde(rename = "f", default, skip_serializing_if = "Option::is_none")]
-    pub files_root: Option<String>,
-    /// Microphone uplink.
-    #[serde(rename = "u", default)]
-    pub audio_uplink: bool,
-    /// Principal id (already `viewer:`-prefixed).
-    #[serde(rename = "i", default)]
-    pub principal_id: String,
-    /// Principal display name.
-    #[serde(rename = "n", default)]
-    pub display_name: String,
-}
-
-impl ViewerGrant {
-    /// The principal a viewer ticket acts as.
-    pub fn principal(&self) -> Principal {
-        Principal {
-            id: self.principal_id.clone(),
-            display_name: self.display_name.clone(),
-            color: String::new(),
-            kind: cua_proto::env::v1::PrincipalKind::Human as i32,
-        }
-    }
-
-    /// Clamps a requested `SessionPolicy` to the grant (view-only <
-    /// background-only < allow-activation).
-    pub fn clamp_policy(&self, requested: i32) -> i32 {
-        requested.min(self.policy)
-    }
-}
-
-/// Why a ticket was refused.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TicketError {
-    /// Not a ticket at all.
-    Malformed,
-    /// Signature mismatch (tampered, or the token rotated).
-    BadSignature,
-    /// Past its expiry.
-    Expired,
-    /// Minted for a different scope.
-    WrongScope,
-}
-
-impl std::fmt::Display for TicketError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Malformed => "malformed ticket",
-            Self::BadSignature => "invalid ticket signature",
-            Self::Expired => "ticket expired",
-            Self::WrongScope => "ticket not valid for this endpoint",
-        })
-    }
-}
-
-impl std::error::Error for TicketError {}
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct TicketPayload {
@@ -195,32 +75,6 @@ pub struct ExternalGrant {
     /// The relay-verified account behind the call, for services that act
     /// for it (`HostSpacesService`).
     pub account: Option<RelayCaller>,
-}
-
-/// The relay-verified account of a call.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct RelayCaller {
-    /// Account id (the assertion's `acct`).
-    pub account: String,
-    /// Verified email, when the relay shares it.
-    pub email: Option<String>,
-    /// Display name.
-    pub name: Option<String>,
-    /// `owner` or `shared` (an editor).
-    pub role: String,
-    /// The relay assertion's `iat` (seconds, relay clock). Tickets minted
-    /// for the call carry it, so the relay can refuse one that predates a
-    /// revoke of this account.
-    pub issued_at: u64,
-    /// Teams (or organizations) the relay admitted the account through;
-    /// empty for the owner and a direct share. Share links to a team check
-    /// these.
-    pub teams: Vec<String>,
-    /// A thread grant: the one Space this machine provides (its relay
-    /// machine id) whose thread the account may reach, because that Space
-    /// is shared with it; `role` is its role on that Space. Such a caller
-    /// reaches [`THREAD_GRANT_GRPC_METHODS`] only.
-    pub space: Option<String>,
 }
 
 /// The only calls a relayed caller may make on a machine that does not
@@ -397,12 +251,12 @@ impl Auth {
         if path == SCREENSHOT_METHOD {
             let log = self.access_log.read().expect("access log lock").clone();
             if let Some(log) = log {
-                extensions.insert(PendingAccess {
+                extensions.insert(PendingScreenshot(Arc::new(PendingAccess {
                     log,
                     via: via.into(),
                     who: who.into(),
                     owner,
-                });
+                })));
             }
             return;
         }
@@ -907,6 +761,16 @@ pub struct PendingAccess {
     owner: bool,
 }
 
+impl ScreenshotRecorder for PendingAccess {
+    fn record(&self, max_dimension: u32) {
+        self.log.record(
+            &self.via,
+            &self.who,
+            &screenshot_what(max_dimension, self.owner),
+        );
+    }
+}
+
 impl std::fmt::Debug for PendingAccess {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PendingAccess")
@@ -914,15 +778,6 @@ impl std::fmt::Debug for PendingAccess {
             .field("who", &self.who)
             .field("owner", &self.owner)
             .finish()
-    }
-}
-
-/// Records the screenshot `request` asks for (`ComputerService.Screenshot`
-/// handlers call it first): a thumbnail or a screen read, by its size.
-pub fn record_screenshot<T>(request: &tonic::Request<T>, max_dimension: u32) {
-    if let Some(p) = request.extensions().get::<PendingAccess>() {
-        p.log
-            .record(&p.via, &p.who, &screenshot_what(max_dimension, p.owner));
     }
 }
 
@@ -953,28 +808,6 @@ pub const AWAIT_TOKEN_FILE_METHODS: &[&str] = &[
     "/cua.env.v1.SystemService/GetCapabilities",
     "/cua.env.v1.SystemService/Health",
 ];
-
-/// Request extension set by [`AuthLayer`] on every authorized gRPC call.
-#[derive(Debug, Clone, Default)]
-pub struct CallerIdentity {
-    /// The decoded `x-cua-principal-bin`, if any.
-    pub principal: Option<Principal>,
-    /// True when the call presented the configured token.
-    pub token_verified: bool,
-    /// True when `principal` was asserted by an [`ExternalAuthenticator`]
-    /// (a relay-signed identity) or a viewer ticket: services must not let
-    /// the request body override its id or display name.
-    pub asserted: bool,
-    /// Set when the call was authorized by a viewer ticket: services clamp
-    /// what they do to the grant.
-    pub viewer: Option<Arc<ViewerGrant>>,
-    /// The relay-verified account of a relayed call.
-    pub account: Option<RelayCaller>,
-    /// A relayed call to a machine that does not share its desktop
-    /// ([`ExternalGrant::host_only`]): `GetCapabilities` reports the
-    /// desktop's features unsupported to it.
-    pub host_only: bool,
-}
 
 /// Tower layer that authenticates gRPC (and gRPC-Web) calls.
 #[derive(Clone)]
@@ -1292,15 +1125,6 @@ where
             }
         }
     }
-}
-
-/// Reads the [`CallerIdentity`] a request was authorized with.
-pub fn caller<T>(request: &tonic::Request<T>) -> CallerIdentity {
-    request
-        .extensions()
-        .get::<CallerIdentity>()
-        .cloned()
-        .unwrap_or_default()
 }
 
 #[cfg(test)]

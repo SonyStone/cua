@@ -840,3 +840,53 @@ mod tests {
         assert!(!ctx.apply_file_token(None));
     }
 }
+
+impl cua_spacesd_provider_api::host::ProviderHost for ServerContext {
+    fn mint_ticket_issued(
+        &self,
+        scope: TicketScope,
+        resource: &str,
+        principal: Option<&Principal>,
+        issued: Option<u64>,
+        ttl: Duration,
+    ) -> (String, SystemTime) {
+        ServerContext::mint_ticket_issued(self, scope, resource, principal, issued, ttl)
+    }
+
+    fn validate_ticket(
+        &self,
+        ticket: &str,
+        scope: TicketScope,
+    ) -> Result<TicketClaims, TicketError> {
+        ServerContext::validate_ticket(self, ticket, scope)
+    }
+
+    fn validate_request_ticket(
+        &self,
+        uri: &http::Uri,
+        headers: &http::HeaderMap,
+        scope: TicketScope,
+    ) -> Result<(TicketClaims, Option<String>), TicketError> {
+        ServerContext::validate_request_ticket(self, uri, headers, scope)
+    }
+
+    fn token_rotations(&self) -> tokio::sync::watch::Receiver<u64> {
+        ServerContext::token_rotations(self)
+    }
+
+    fn machine_renewals(&self) -> tokio::sync::watch::Receiver<u64> {
+        ServerContext::machine_renewals(self)
+    }
+
+    fn set_media_sessions(&self, count: u32) {
+        self.media_sessions().store(count, Ordering::Relaxed);
+    }
+
+    fn audio_uplink_allowed(&self, principal: Option<&Principal>) -> bool {
+        ServerContext::audio_uplink_allowed(self, principal)
+    }
+
+    fn cursor_probe(&self) -> bool {
+        ServerContext::cursor_probe(self)
+    }
+}

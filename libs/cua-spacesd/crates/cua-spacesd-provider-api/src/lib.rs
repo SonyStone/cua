@@ -19,6 +19,8 @@ use cua_media_protocol::{
 use serde_json::Value;
 use thiserror::Error;
 
+pub mod host;
+
 pub type ProviderFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// Provider-owned identity. Its value is never serialized or accepted from a

@@ -17,6 +17,7 @@ relay-hosted = ["cua-relay/hosted"]
 # The machine's node on the WireGuard®-based mesh (mesh_host).
 cua-mesh = { path = "../../../cua/crates/cua-mesh" }
 cua-proto = { path = "../../../cua/crates/cua-proto" }
+cua-spacesd-provider-api = { path = "../cua-spacesd-provider-api" }
 # A host's checkpoint files, served to its owner's other machines.
 cua-snapshot-sync = { path = "../../../cua/crates/cua-snapshot-sync", default-features = false, features = ["serve"] }
 # Sealed delivery to a pinned machine key (S1): this guest's own keypair

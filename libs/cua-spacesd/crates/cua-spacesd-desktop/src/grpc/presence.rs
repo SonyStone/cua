@@ -1030,7 +1030,7 @@ impl PresenceService for Presence {
         request: Request<JoinRequest>,
     ) -> Result<Response<Self::JoinStream>, Status> {
         let metadata_principal = caller_principal(&request);
-        let asserted = cua_spacesd_server::caller(&request).asserted;
+        let asserted = cua_spacesd_provider_api::host::caller(&request).asserted;
         let request = request.into_inner();
         let options = JoinOptions::from_request(&request);
         let requested = request

@@ -37,8 +37,8 @@ pub(crate) struct Computer(pub Arc<DesktopState>);
 /// Returns the grant (for confining clipboard file paths).
 fn viewer_clipboard_allowed<T>(
     request: &Request<T>,
-) -> Result<Option<Arc<cua_spacesd_server::ViewerGrant>>, Status> {
-    match cua_spacesd_server::caller(request).viewer {
+) -> Result<Option<Arc<cua_spacesd_provider_api::host::ViewerGrant>>, Status> {
+    match cua_spacesd_provider_api::host::caller(request).viewer {
         Some(grant) if !grant.clipboard => Err(status::status(
             Code::PermissionDenied,
             ErrorReason::PermissionDenied,
@@ -358,7 +358,10 @@ impl ComputerService for Computer {
     ) -> Result<Response<ScreenshotResponse>, Status> {
         // The access log says whether this was a thumbnail or a screen
         // read (the auth layer leaves screenshots to us).
-        cua_spacesd_server::auth::record_screenshot(&request, request.get_ref().max_dimension);
+        cua_spacesd_provider_api::host::record_screenshot(
+            &request,
+            request.get_ref().max_dimension,
+        );
         let request = request.into_inner();
         let state = self.0.clone();
         let (source, window) = match &request.source {
@@ -724,7 +727,13 @@ impl ComputerService for Computer {
                 return Err(invalid("clipboard file paths must be absolute"));
             }
             if let Some(grant) = viewer.as_deref() {
-                cua_spacesd_server::filesystem::confine(grant, path.into())?;
+                cua_spacesd_provider_api::host::confine(grant, path.into()).map_err(|why| {
+                    status::status(
+                        Code::PermissionDenied,
+                        ErrorReason::PermissionDenied,
+                        format!("viewer ticket: {why}"),
+                    )
+                })?;
             }
         }
         let state = self.0.clone();

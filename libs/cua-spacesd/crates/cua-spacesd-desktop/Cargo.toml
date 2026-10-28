@@ -31,7 +31,6 @@ tracing.workspace = true
 uuid.workspace = true
 # Desktop gRPC services (cua.env.v1) and the /media WebSocket.
 cua-proto = { path = "../../../cua/crates/cua-proto" }
-cua-spacesd-server = { path = "../cua-spacesd-server" }
 tonic = { version = "0.14", default-features = false, features = ["router", "codegen"] }
 prost = "0.14"
 axum = { version = "0.8", features = ["ws", "http2"] }
@@ -107,6 +106,9 @@ windows = { version = "0.58", features = [
 ] }
 
 [dev-dependencies]
+# Tests host the provider in the real server; the library only needs
+# cua-spacesd-provider-api::host.
+cua-spacesd-server = { path = "../cua-spacesd-server" }
 async-trait = "0.1"
 tonic = { version = "0.14", features = ["transport"] }
 tokio-tungstenite.workspace = true

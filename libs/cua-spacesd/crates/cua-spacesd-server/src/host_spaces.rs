@@ -44,7 +44,6 @@ use cua_proto::env::v1::*;
 use tonic::{Code, Request, Response, Status};
 
 use crate::auth::caller;
-use crate::context::ServerContext;
 use crate::error::status;
 use crate::provider::{feature, ServiceProvider};
 use crate::relay_account::{HostPolicy, SpacesDaemon};
@@ -202,7 +201,7 @@ impl ServiceProvider for HostSpacesProvider {
     fn register(
         &self,
         routes: tonic::service::Routes,
-        _ctx: &ServerContext,
+        _host: &dyn cua_spacesd_provider_api::host::ProviderHost,
     ) -> tonic::service::Routes {
         let host = HostSpacesImpl {
             policy_file: Arc::new(self.policy_file.clone()),

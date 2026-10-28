@@ -26,7 +26,7 @@ use cua_spacesd_session::media::{Outbound, Viewer};
 use futures_util::{SinkExt as _, StreamExt as _};
 
 use super::DesktopState;
-use cua_spacesd_server::{TicketError, TicketScope};
+use cua_spacesd_provider_api::host::{TicketError, TicketScope};
 
 pub(crate) fn router(state: Arc<DesktopState>) -> Router {
     Router::new()

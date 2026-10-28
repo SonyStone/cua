@@ -328,48 +328,17 @@ impl FilesystemServiceImpl {
     }
 }
 
-/// Keeps a viewer inside its grant's `files_root`: the lexical path must be
-/// under the root, and so must the canonical form of its deepest existing
-/// ancestor (a symlink inside the root cannot lead out of it).
+/// Keeps a viewer inside its grant's `files_root`
+/// ([`cua_spacesd_provider_api::host::confine`]).
 pub fn confine(grant: &crate::auth::ViewerGrant, path: PathBuf) -> Result<PathBuf, Status> {
-    let denied = |why: &str| {
+    cua_spacesd_provider_api::host::confine(grant, path).map_err(|why| {
         StatusBuilder::new(
             Code::PermissionDenied,
             ErrorReason::PermissionDenied,
             format!("viewer ticket: {why}"),
         )
         .build()
-    };
-    let Some(root) = grant.files_root.as_deref().map(Path::new) else {
-        return Err(denied("no file access was granted"));
-    };
-    if !path.starts_with(root) {
-        return Err(denied(&format!(
-            "{} is outside {}",
-            path.display(),
-            root.display()
-        )));
-    }
-    let mut probe = path.as_path();
-    loop {
-        match std::fs::canonicalize(probe) {
-            Ok(real) => {
-                if !real.starts_with(root) {
-                    return Err(denied(&format!(
-                        "{} leaves {}",
-                        path.display(),
-                        root.display()
-                    )));
-                }
-                break;
-            }
-            Err(_) => match probe.parent() {
-                Some(parent) => probe = parent,
-                None => break,
-            },
-        }
-    }
-    Ok(path)
+    })
 }
 
 fn write_mode(value: i32) -> Result<WriteMode, Status> {

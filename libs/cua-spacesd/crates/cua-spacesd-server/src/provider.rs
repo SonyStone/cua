@@ -6,12 +6,8 @@
 //! stubs registered while no provider implements them.
 
 use std::convert::Infallible;
-use std::sync::Arc;
 
-use cua_driver_core::server::ToolProvider;
-use cua_proto::env::v1::{ComponentHealth, Display, DisplayServer, Feature};
-
-use crate::context::ServerContext;
+use cua_proto::env::v1::Feature;
 
 /// Fully-qualified names of the desktop services an extension provider is
 /// expected to implement.
@@ -45,76 +41,7 @@ pub const DESKTOP_FEATURES: &[&str] = &[
     "audio.opus",
 ];
 
-/// A bundle of extra gRPC services and HTTP routes served on the driver port.
-///
-/// Lifecycle: the binary builds a [`ServerContext`], constructs providers
-/// (keeping a clone of the context if they need tickets or the principal),
-/// and hands them to [`crate::ServerBuilder::provider`]. At build time the
-/// server calls, in order, [`ServiceProvider::register`] (once) and
-/// [`ServiceProvider::http_routes`] (once), and calls
-/// [`ServiceProvider::capabilities`], [`ServiceProvider::displays`] and
-/// [`ServiceProvider::health`] on every `GetCapabilities` / `Health`.
-///
-/// Rules:
-/// - Every gRPC service added in `register` must be listed in
-///   [`ServiceProvider::services`]; the server registers a
-///   `FAILED_PRECONDITION` stub for every desktop service no provider
-///   claims, and registering the same service twice panics at build time.
-/// - gRPC services are authenticated by the server (root token) before they
-///   run; read the caller with [`crate::auth::caller`].
-/// - HTTP routes are **not** authenticated by the server: they are
-///   side channels that must validate a ticket
-///   ([`ServerContext::validate_request_ticket`]) or the bearer token
-///   ([`ServerContext::check_bearer`]) themselves. Every path must be listed
-///   in [`ServiceProvider::http_paths`] and must be one of the paths in
-///   `cua_proto::metadata` (the route/spec test enforces this).
-pub trait ServiceProvider: Send + Sync + 'static {
-    /// Features this provider implements (supported or not, with
-    /// limitations). Entries override the server's defaults by name.
-    fn capabilities(&self) -> Vec<Feature>;
-
-    /// Adds this provider's tonic services to `routes`.
-    fn register(
-        &self,
-        routes: tonic::service::Routes,
-        ctx: &ServerContext,
-    ) -> tonic::service::Routes;
-
-    /// HTTP routes (for example the `/media` WebSocket), if any.
-    fn http_routes(&self) -> Option<axum::Router>;
-
-    /// Fully-qualified names (`cua.env.v1.StreamService`) of the gRPC
-    /// services `register` adds.
-    fn services(&self) -> Vec<&'static str> {
-        Vec::new()
-    }
-
-    /// Paths served by [`ServiceProvider::http_routes`].
-    fn http_paths(&self) -> Vec<&'static str> {
-        Vec::new()
-    }
-
-    /// Displays for `GetCapabilities.displays`.
-    fn displays(&self) -> Vec<Display> {
-        Vec::new()
-    }
-
-    /// Graphical session type for `GetCapabilities.display_server`.
-    fn display_server(&self) -> Option<DisplayServer> {
-        None
-    }
-
-    /// Per-component health for `Health` (and `/health`).
-    fn health(&self) -> Vec<ComponentHealth> {
-        Vec::new()
-    }
-
-    /// The cua-driver tool registry this provider already built, so the
-    /// Driver service and `/mcp` share it instead of building a second one.
-    fn tool_provider(&self) -> Option<Arc<dyn ToolProvider>> {
-        None
-    }
-}
+pub use cua_spacesd_provider_api::host::ServiceProvider;
 
 /// Feature helper.
 pub fn feature(name: &str, supported: bool, limitation: impl Into<String>) -> Feature {

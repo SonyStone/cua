@@ -6,7 +6,7 @@
 //! ticket-authenticated `/media` WebSocket (rcdp wire v2).
 //!
 //! [`DesktopServiceProvider`] plugs into the server core through the
-//! `cua_spacesd_server::ServiceProvider` extension point. Platform work goes through a
+//! `cua_spacesd_provider_api::host::ServiceProvider` extension point. Platform work goes through a
 //! [`backend::DesktopBackend`]; the media plane is `cua_spacesd_session::media`.
 
 mod accessibility;
@@ -39,7 +39,7 @@ use cua_proto::env::v1::{
 use cua_spacesd_session::media::leases::InputLeases;
 use cua_spacesd_session::media::MediaRuntime;
 
-use cua_spacesd_server::{ServerContext, ServiceProvider};
+use cua_spacesd_provider_api::host::{ProviderHost, ServiceProvider};
 use presence::PresenceHub;
 use prost::Message as _;
 
@@ -78,7 +78,7 @@ pub(crate) struct DesktopState {
     pub backend: Arc<dyn DesktopBackend>,
     pub media: Arc<MediaRuntime>,
     pub presence: Arc<PresenceHub>,
-    pub ctx: ServerContext,
+    pub ctx: Arc<dyn ProviderHost>,
     pub leases: Arc<InputLeases>,
     pub screenshots: Mutex<VecDeque<ScreenshotRecord>>,
     pub a11y: Mutex<HashMap<String, A11ySnapshotRecord>>,
@@ -129,7 +129,11 @@ pub struct DesktopServiceProvider {
 
 impl DesktopServiceProvider {
     /// Build over an explicit backend (tests use a fake).
-    pub fn new(backend: Arc<dyn DesktopBackend>, ctx: ServerContext) -> Self {
+    pub fn new(backend: Arc<dyn DesktopBackend>, host: impl ProviderHost) -> Self {
+        Self::with_host(backend, Arc::new(host))
+    }
+
+    fn with_host(backend: Arc<dyn DesktopBackend>, ctx: Arc<dyn ProviderHost>) -> Self {
         let leases = Arc::new(InputLeases::default());
         let media = MediaRuntime::new(backend.media_providers(), leases.clone());
         let presence = PresenceHub::new();
@@ -208,7 +212,10 @@ impl DesktopServiceProvider {
 
     /// Build over this machine's desktop: the X11 backend on Linux, the
     /// driver-tool backend over the rcdp media providers on macOS/Windows.
-    pub fn for_host(ctx: ServerContext) -> Result<Self, cua_spacesd_provider_api::ProviderError> {
+    pub fn for_host(
+        host: impl ProviderHost,
+    ) -> Result<Self, cua_spacesd_provider_api::ProviderError> {
+        let ctx: Arc<dyn ProviderHost> = Arc::new(host);
         #[cfg(target_os = "linux")]
         {
             if crate::wayland_session() {
@@ -220,7 +227,7 @@ impl DesktopServiceProvider {
                 );
             }
             let backend = Arc::new(linux_backend::LinuxBackend::new()?);
-            let provider = Self::new(backend, ctx);
+            let provider = Self::with_host(backend, ctx);
             provider.install_agent_cursor_hook();
             provider.install_pointer_shapes();
             Ok(provider)
@@ -240,7 +247,7 @@ impl DesktopServiceProvider {
                 audio,
                 platform,
             ));
-            let provider = Self::new(backend, ctx);
+            let provider = Self::with_host(backend, ctx);
             provider.install_agent_cursor_hook();
             provider.install_pointer_shapes();
             Ok(provider)
@@ -250,14 +257,15 @@ impl DesktopServiceProvider {
     /// Like [`Self::for_host`] with an explicit audio provider (Linux).
     #[cfg(target_os = "linux")]
     pub fn for_host_with_audio(
-        ctx: ServerContext,
+        host: impl ProviderHost,
         audio: Option<Arc<dyn cua_spacesd_session::media::audio::AudioProvider>>,
     ) -> Result<Self, cua_spacesd_provider_api::ProviderError> {
+        let ctx: Arc<dyn ProviderHost> = Arc::new(host);
         if crate::wayland_session() {
             return Self::for_wayland(ctx, audio);
         }
         let backend = Arc::new(linux_backend::LinuxBackend::with_audio(audio)?);
-        let provider = Self::new(backend, ctx);
+        let provider = Self::with_host(backend, ctx);
         provider.install_agent_cursor_hook();
         provider.install_pointer_shapes();
         Ok(provider)
@@ -270,7 +278,7 @@ impl DesktopServiceProvider {
     /// cua-hyprland-plugin seats) and accessibility themselves.
     #[cfg(target_os = "linux")]
     fn for_wayland(
-        ctx: ServerContext,
+        ctx: Arc<dyn ProviderHost>,
         audio: Option<Arc<dyn cua_spacesd_session::media::audio::AudioProvider>>,
     ) -> Result<Self, cua_spacesd_provider_api::ProviderError> {
         let backend = Arc::new(
@@ -282,7 +290,7 @@ impl DesktopServiceProvider {
             .with_text_clipboard(crate::wayland_clipboard())
             .with_window_manager(crate::wayland_window_manager()),
         );
-        let provider = Self::new(backend, ctx);
+        let provider = Self::with_host(backend, ctx);
         provider.install_agent_cursor_hook();
         provider.install_pointer_shapes();
         Ok(provider)
@@ -351,7 +359,7 @@ impl DesktopServiceProvider {
     /// An axum router serving every desktop service (gRPC) plus `/media`.
     /// Convenience for tests and for binaries without the server core.
     pub fn standalone_router(&self) -> axum::Router {
-        let routes = self.register(tonic::service::Routes::default(), &self.state.ctx);
+        let routes = self.register(tonic::service::Routes::default(), &*self.state.ctx);
         let mut router = routes.into_axum_router();
         if let Some(http) = self.http_routes() {
             router = router.merge(http);
@@ -425,9 +433,9 @@ impl ServiceProvider for DesktopServiceProvider {
     fn register(
         &self,
         routes: tonic::service::Routes,
-        _ctx: &ServerContext,
+        _host: &dyn ProviderHost,
     ) -> tonic::service::Routes {
-        let limit = cua_spacesd_server::config::MAX_MESSAGE_BYTES as usize;
+        let limit = cua_spacesd_provider_api::host::MAX_MESSAGE_BYTES as usize;
         routes
             .add_service(
                 ComputerServiceServer::new(computer::Computer(self.state.clone()))
@@ -709,13 +717,15 @@ pub(crate) fn proto_display(display: cua_spacesd_provider_api::ProviderDisplay) 
 pub(crate) fn caller_principal<T>(
     request: &tonic::Request<T>,
 ) -> Option<cua_proto::env::v1::Principal> {
-    cua_spacesd_server::caller(request).principal.or_else(|| {
-        let value = request
-            .metadata()
-            .get_bin(cua_proto::metadata::PRINCIPAL_BIN)?;
-        let bytes = value.to_bytes().ok()?;
-        cua_proto::env::v1::Principal::decode(bytes.as_ref()).ok()
-    })
+    cua_spacesd_provider_api::host::caller(request)
+        .principal
+        .or_else(|| {
+            let value = request
+                .metadata()
+                .get_bin(cua_proto::metadata::PRINCIPAL_BIN)?;
+            let bytes = value.to_bytes().ok()?;
+            cua_proto::env::v1::Principal::decode(bytes.as_ref()).ok()
+        })
 }
 
 pub(crate) fn timestamp(time: std::time::SystemTime) -> cua_proto::wkt::Timestamp {

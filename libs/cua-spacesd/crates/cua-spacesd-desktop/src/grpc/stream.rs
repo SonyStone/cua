@@ -4,7 +4,6 @@
 //! `cua.env.v1.StreamService`: target discovery, media session negotiation
 //! and ticket minting. Frames flow on the `/media` WebSocket (rcdp wire v2).
 
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -34,7 +33,7 @@ use super::caller_principal;
 use super::status::{self, invalid, join_error, not_found};
 use super::windows::{matches, window_info};
 use super::{proto_display, DesktopState};
-use cua_spacesd_server::TicketScope;
+use cua_spacesd_provider_api::host::TicketScope;
 
 pub(crate) struct Stream(pub Arc<DesktopState>);
 
@@ -290,11 +289,11 @@ impl StreamService for Stream {
         request: Request<OpenMediaRequest>,
     ) -> Result<Response<OpenMediaResponse>, Status> {
         let principal = caller_principal(&request);
-        let viewer = cua_spacesd_server::caller(&request).viewer;
-        let relayed = cua_spacesd_server::caller(&request).account;
+        let viewer = cua_spacesd_provider_api::host::caller(&request).viewer;
+        let relayed = cua_spacesd_provider_api::host::caller(&request).account;
         // A principal the server authenticated (relay-asserted or a viewer
         // ticket), as opposed to one the caller merely declared.
-        let authenticated = cua_spacesd_server::caller(&request).principal;
+        let authenticated = cua_spacesd_provider_api::host::caller(&request).principal;
         let mut request = request.into_inner();
         // A viewer ticket caps the session policy (and the uplink, below).
         if let Some(grant) = viewer.as_deref() {
@@ -443,8 +442,7 @@ impl StreamService for Stream {
         );
         self.0
             .ctx
-            .media_sessions()
-            .store(self.0.media.session_count() as u32, Ordering::Relaxed);
+            .set_media_sessions(self.0.media.session_count() as u32);
         let (x, y, width, height) = opened.logical_bounds.unwrap_or_default();
         let geometry = &opened.opened.geometry;
         let audio = opened.audio.as_ref().map(|audio| NegotiatedAudio {
@@ -605,8 +603,7 @@ impl StreamService for Stream {
         }
         self.0
             .ctx
-            .media_sessions()
-            .store(self.0.media.session_count() as u32, Ordering::Relaxed);
+            .set_media_sessions(self.0.media.session_count() as u32);
         Ok(Response::new(CloseMediaResponse {}))
     }
 }

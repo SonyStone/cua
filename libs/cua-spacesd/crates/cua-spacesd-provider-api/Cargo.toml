@@ -11,3 +11,12 @@ publish = false
 cua-media-protocol = { path = "../../../cua/crates/cua-media-protocol" }
 serde_json.workspace = true
 thiserror = "2"
+# `host`: the ServiceProvider extension point and what a provider needs from
+# its host (callers, tickets), so providers build without cua-spacesd-server.
+cua-proto = { path = "../../../cua/crates/cua-proto" }
+cua-driver-core = { path = "../../../cua-driver/rust/crates/cua-driver-core", default-features = false }
+serde.workspace = true
+tonic = { version = "0.14", default-features = false, features = ["router"] }
+axum = { version = "0.8", default-features = false }
+http.workspace = true
+tokio = { version = "1", features = ["sync"] }

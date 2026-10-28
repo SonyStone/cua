@@ -22,7 +22,7 @@ use cua_media_protocol::v2::{
     ServerMessage,
 };
 use cua_media_transport::quic::{read_message, write_message, QuicIdentity};
-use cua_spacesd_server::TicketScope;
+use cua_spacesd_provider_api::host::TicketScope;
 use cua_spacesd_session::media::Outbound;
 
 use super::DesktopState;
