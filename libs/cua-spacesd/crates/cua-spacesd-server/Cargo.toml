@@ -24,7 +24,7 @@ cua-snapshot-sync = { path = "../../../cua/crates/cua-snapshot-sync", default-fe
 cua-machine-seal = { path = "../../../cua/crates/cua-machine-seal" }
 # Opt-in aggregate health counts (off unless the host enables them).
 cua-telemetry = { path = "../../../cua/crates/cua-telemetry" }
-cua-driver-core = { path = "../../../cua-driver/rust/crates/cua-driver-core" }
+cua-driver-core = { path = "../../../cua-driver/rust/crates/cua-driver-core", default-features = false }
 # Typed Driver envelopes over `/mcp`: the canonical receiver (generations,
 # request ledger, cancellation) and the envelope wire records.
 cua-driver-sdk = { path = "../../../cua-driver/rust/crates/cua-driver-sdk", default-features = false }

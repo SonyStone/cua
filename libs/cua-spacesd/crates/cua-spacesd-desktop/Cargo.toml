@@ -16,7 +16,7 @@ cua-media-transport = { path = "../../../cua/crates/cua-media-transport", featur
 quinn.workspace = true
 bytes.workspace = true
 cua-media-codec = { path = "../../../cua/crates/cua-media-codec", features = ["server"] }
-cua-driver-core = { path = "../../../cua-driver/rust/crates/cua-driver-core" }
+cua-driver-core = { path = "../../../cua-driver/rust/crates/cua-driver-core", default-features = false }
 cua-driver-contract = { path = "../../../cua-driver/rust/crates/cua-driver-contract" }
 # Platform-agnostic: types, geometry and the session->color identity mapping,
 # with no windowing code (each platform crate owns its own overlay window). It

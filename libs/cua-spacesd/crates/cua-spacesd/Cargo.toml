@@ -12,7 +12,7 @@ publish = false
 embed-resource = "2"
 
 [dependencies]
-cua-driver-core = { path = "../../../cua-driver/rust/crates/cua-driver-core" }
+cua-driver-core = { path = "../../../cua-driver/rust/crates/cua-driver-core", default-features = false }
 cua-logging = { path = "../../../cua/crates/cua-logging" }
 cua-media-protocol = { path = "../../../cua/crates/cua-media-protocol" }
 cua-spacesd-provider-api = { path = "../cua-spacesd-provider-api" }
