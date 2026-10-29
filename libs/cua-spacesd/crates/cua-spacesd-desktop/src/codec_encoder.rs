@@ -152,7 +152,8 @@ impl FrameEncoder for CodecEncoder {
     }
 }
 
-#[cfg(test)]
+// Needs a software H.264 encoder; hardware ones are not guaranteed.
+#[cfg(all(test, feature = "h264"))]
 mod tests {
     use super::*;
 

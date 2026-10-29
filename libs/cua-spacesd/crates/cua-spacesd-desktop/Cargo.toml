@@ -8,6 +8,13 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+default = ["h264"]
+# Software H.264 through OpenH264 built from source: the Windows encoder and
+# the codec fallback on Linux. Without it, Windows offers BGRA frames only and
+# Linux only the hardware encoders; macOS keeps VideoToolbox either way.
+h264 = ["dep:openh264", "cua-media-codec/openh264"]
+
 [dependencies]
 cua-media-protocol = { path = "../../../cua/crates/cua-media-protocol" }
 cua-spacesd-provider-api = { path = "../cua-spacesd-provider-api" }
@@ -15,7 +22,8 @@ cua-spacesd-session = { path = "../cua-spacesd-session" }
 cua-media-transport = { path = "../../../cua/crates/cua-media-transport", features = ["quic"] }
 quinn.workspace = true
 bytes.workspace = true
-cua-media-codec = { path = "../../../cua/crates/cua-media-codec", features = ["server"] }
+# `server` minus OpenH264, which the `h264` feature below adds back.
+cua-media-codec = { path = "../../../cua/crates/cua-media-codec", default-features = false, features = ["opus", "hw", "pulse", "sck-audio", "wasapi"] }
 cua-driver-core = { path = "../../../cua-driver/rust/crates/cua-driver-core", default-features = false }
 cua-driver-contract = { path = "../../../cua-driver/rust/crates/cua-driver-contract" }
 # Platform-agnostic: types, geometry and the session->color identity mapping,
@@ -86,7 +94,7 @@ libc = "0.2"
 clipboard-rs = "0.3.5"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-openh264 = "0.9.7"
+openh264 = { version = "0.9.7", optional = true }
 platform-windows = { path = "../../../cua-driver/rust/crates/platform-windows" }
 windows = { version = "0.58", features = [
     "Win32_Foundation",

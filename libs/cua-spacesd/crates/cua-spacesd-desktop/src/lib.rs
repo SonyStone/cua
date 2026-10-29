@@ -31,7 +31,7 @@ mod macos_h264;
 mod windows_capture;
 #[cfg(target_os = "windows")]
 mod windows_display;
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", feature = "h264"))]
 mod windows_h264;
 #[cfg(target_os = "windows")]
 mod windows_support;
@@ -1783,6 +1783,7 @@ impl CaptureProvider for CuaCaptureProvider {
         if let Some(display_id) = display_key(target) {
             // Whole display: the GDI loop, through the same H.264 encoder as
             // window streams when the client takes H.264.
+            #[cfg(feature = "h264")]
             if config.accepted_formats.contains(&PixelFormat::H264AnnexB) {
                 let encoder = windows_h264::WindowsH264Encoder::start(
                     config.max_fps,
@@ -1824,7 +1825,7 @@ impl CaptureProvider for CuaCaptureProvider {
                 return Ok(Arc::new(MacosEncodedCaptureLease { capture, encoder }));
             }
         }
-        #[cfg(target_os = "windows")]
+        #[cfg(all(target_os = "windows", feature = "h264"))]
         {
             if config.accepted_formats.contains(&PixelFormat::H264AnnexB) {
                 let encoder = windows_h264::WindowsH264Encoder::start(
@@ -1878,13 +1879,13 @@ impl CaptureLease for MacosEncodedCaptureLease {
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", feature = "h264"))]
 struct WindowsEncodedCaptureLease {
     capture: Arc<dyn CaptureLease>,
     encoder: Arc<windows_h264::WindowsH264Encoder>,
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", feature = "h264"))]
 impl CaptureLease for WindowsEncodedCaptureLease {
     fn request_keyframe(&self) {
         self.encoder.request_keyframe();
